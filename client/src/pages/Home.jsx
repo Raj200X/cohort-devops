@@ -33,7 +33,7 @@ const Home = () => {
         if (user) {
             fetchDashboardData();
         }
-    }, [user]);
+    }, [user?._id]); // ✅ Use primitive string ID, not the whole object
 
 
 

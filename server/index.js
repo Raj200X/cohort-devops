@@ -7,6 +7,45 @@ require('dotenv').config();
 require('./config/passport');
 const passport = require('passport');
 
+// ─── Prometheus Monitoring ────────────────────────────────────────────────────
+const client = require('prom-client');
+const register = new client.Registry();
+
+// Collect default Node.js metrics (event loop lag, memory, GC, etc.)
+client.collectDefaultMetrics({ register });
+
+// Custom metric: HTTP request counter
+const httpRequestCounter = new client.Counter({
+    name: 'cohort_http_requests_total',
+    help: 'Total number of HTTP requests',
+    labelNames: ['method', 'route', 'status_code'],
+    registers: [register],
+});
+
+// Custom metric: HTTP request duration histogram
+const httpRequestDuration = new client.Histogram({
+    name: 'cohort_http_request_duration_seconds',
+    help: 'Duration of HTTP requests in seconds',
+    labelNames: ['method', 'route', 'status_code'],
+    buckets: [0.01, 0.05, 0.1, 0.3, 0.5, 1, 2, 5],
+    registers: [register],
+});
+
+// Custom metric: Active WebSocket connections
+const activeSocketConnections = new client.Gauge({
+    name: 'cohort_active_socket_connections',
+    help: 'Number of currently active Socket.IO connections',
+    registers: [register],
+});
+
+// Custom metric: MongoDB connection status (1 = connected, 0 = disconnected)
+const mongoConnectionStatus = new client.Gauge({
+    name: 'cohort_mongodb_connected',
+    help: 'MongoDB connection status (1=connected, 0=disconnected)',
+    registers: [register],
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 const app = express();
 const server = http.createServer(app);
 
@@ -28,6 +67,29 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(passport.initialize());
+
+// ─── HTTP Instrumentation Middleware ─────────────────────────────────────────
+app.use((req, res, next) => {
+    // Skip metrics endpoint itself to avoid self-scraping noise
+    if (req.path === '/metrics') return next();
+    const end = httpRequestDuration.startTimer();
+    res.on('finish', () => {
+        const labels = {
+            method: req.method,
+            route: req.route ? req.route.path : req.path,
+            status_code: res.statusCode,
+        };
+        httpRequestCounter.inc(labels);
+        end(labels);
+    });
+    next();
+});
+
+// ─── Metrics endpoint for Prometheus scraping ─────────────────────────────────
+app.get('/metrics', async (req, res) => {
+    res.set('Content-Type', register.contentType);
+    res.end(await register.metrics());
+});
 
 app.get('/', (req, res) => {
     res.send('Server is running');
@@ -163,23 +225,38 @@ const PORT = process.env.PORT || 5000;
 mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/studyroom', {
     family: 4 // Force IPv4 to avoid some local connection issues
 })
-    .then(() => console.log('MongoDB connected'))
+    .then(() => {
+        console.log('MongoDB connected');
+        mongoConnectionStatus.set(1);
+    })
     .catch(err => {
         console.error('MongoDB Connection Error:', err);
+        mongoConnectionStatus.set(0);
         // Fallback for some local environments if 127.0.0.1 fails
         if (err.name === 'MongoServerSelectionError' && !process.env.MONGO_URI) {
             console.log('Retrying with localhost...');
             mongoose.connect('mongodb://localhost:27017/studyroom', { family: 4 })
-                .then(() => console.log('MongoDB connected (fallback)'))
-                .catch(e => console.error('Fallback failed:', e));
+                .then(() => {
+                    console.log('MongoDB connected (fallback)');
+                    mongoConnectionStatus.set(1);
+                })
+                .catch(e => {
+                    console.error('Fallback failed:', e);
+                    mongoConnectionStatus.set(0);
+                });
         }
     });
+
+// Track MongoDB disconnection events
+mongoose.connection.on('disconnected', () => mongoConnectionStatus.set(0));
+mongoose.connection.on('reconnected', () => mongoConnectionStatus.set(1));
 
 // userId → socketId map for DM routing (persists across connections)
 const userSocketMap = {};
 
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
+    activeSocketConnections.inc();
 
     // Register user's socket ID so DMs can be routed
     socket.on('register-user', (userId) => {
@@ -230,6 +307,7 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
+        activeSocketConnections.dec();
         // Remove from DM routing map
         for (const [uid, sid] of Object.entries(userSocketMap)) {
             if (sid === socket.id) delete userSocketMap[uid];
