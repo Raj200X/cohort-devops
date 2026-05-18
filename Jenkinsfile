@@ -46,7 +46,7 @@ pipeline {
             steps {
                 echo 'Building Docker images locally on Mac...'
                 sh '/usr/local/bin/docker build --platform linux/amd64 -t ${SERVER_IMAGE}:latest ${PROJECT_DIR}/server'
-                sh '/usr/local/bin/docker build --platform linux/amd64 --no-cache --build-arg VITE_API_URL=http://13.206.187.45:30500 -t ${CLIENT_IMAGE}:latest ${PROJECT_DIR}/client'
+                sh '/usr/local/bin/docker build --platform linux/amd64 --no-cache --build-arg VITE_API_URL=http://13.206.187.45.nip.io:30500 -t ${CLIENT_IMAGE}:latest ${PROJECT_DIR}/client'
                 echo 'Build complete!'
             }
         }
