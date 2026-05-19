@@ -1,0 +1,111 @@
+# ⚠️  Replace YOUR_AWS_ACCOUNT_ID and YOUR_AWS_REGION with real values
+# Example: 123456789012.dkr.ecr.ap-south-1.amazonaws.com/cohort-server:latest
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cohort-server
+  namespace: cohort
+  labels:
+    app: cohort-server
+spec:
+  replicas: 1    # Keep at 1 on t2.micro (1 GB RAM)
+  selector:
+    matchLabels:
+      app: cohort-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: cohort-server
+    spec:
+      # Pull from ECR — k3s needs this image pull secret
+      # Created via: kubectl create secret docker-registry ecr-secret ...
+      imagePullSecrets:
+        - name: ecr-secret
+
+      containers:
+        - name: cohort-server
+          image: 381492190450.dkr.ecr.ap-south-1.amazonaws.com/cohort-server:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+
+          # Non-sensitive config from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: cohort-config
+
+          # Sensitive secrets from Secret
+          env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: cohort-secrets
+                  key: MONGO_URI
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cohort-secrets
+                  key: JWT_SECRET
+            - name: SEED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cohort-secrets
+                  key: SEED_SECRET
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: cohort-secrets
+                  key: GOOGLE_CLIENT_ID
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cohort-secrets
+                  key: GOOGLE_CLIENT_SECRET
+            - name: CLOUDINARY_CLOUD_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: cohort-secrets
+                  key: CLOUDINARY_CLOUD_NAME
+            - name: CLOUDINARY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cohort-secrets
+                  key: CLOUDINARY_API_KEY
+            - name: CLOUDINARY_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cohort-secrets
+                  key: CLOUDINARY_API_SECRET
+
+          # Resource limits — tuned for 1 GB RAM t2.micro
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "384Mi"
+              cpu: "400m"
+
+          # Liveness probe — restart if server hangs
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 3
+
+          # Readiness probe — only route traffic when ready
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cohort-client
+  namespace: cohort
+  labels:
+    app: cohort-client
+spec:
+  selector:
+    app: cohort-client
+  type: NodePort
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      # NodePort: access via http://EC2_PUBLIC_IP:30080
+      nodePort: 30080

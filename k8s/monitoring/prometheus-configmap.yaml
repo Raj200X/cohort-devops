@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: cohort
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+      # Scrape the Cohort backend /metrics endpoint
+      - job_name: 'cohort-server'
+        static_configs:
+          - targets: ['cohort-server.cohort.svc.cluster.local:5000']
+        metrics_path: '/metrics'
+
+      # Scrape Prometheus itself
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']

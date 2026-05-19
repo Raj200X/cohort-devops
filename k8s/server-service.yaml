@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cohort-server
+  namespace: cohort
+  labels:
+    app: cohort-server
+spec:
+  selector:
+    app: cohort-server
+  type: NodePort
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+      # NodePort: access via http://EC2_PUBLIC_IP:30500
+      nodePort: 30500
