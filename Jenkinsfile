@@ -19,7 +19,7 @@ pipeline {
         ECR_REGISTRY = '381492190450.dkr.ecr.ap-south-1.amazonaws.com'
         SERVER_IMAGE = '381492190450.dkr.ecr.ap-south-1.amazonaws.com/cohort-server'
         CLIENT_IMAGE = '381492190450.dkr.ecr.ap-south-1.amazonaws.com/cohort-client'
-        EC2_HOST     = '13.206.187.45'
+        EC2_HOST     = '15.207.231.86'
         PROJECT_DIR  = '/Users/raj/Desktop/devopsproject/Cohort'
     }
 
@@ -46,7 +46,7 @@ pipeline {
             steps {
                 echo 'Building Docker images locally on Mac...'
                 sh '/usr/local/bin/docker build --platform linux/amd64 -t ${SERVER_IMAGE}:latest ${PROJECT_DIR}/server'
-                sh '/usr/local/bin/docker build --platform linux/amd64 --no-cache --build-arg VITE_API_URL=http://13.206.187.45.nip.io:30500 -t ${CLIENT_IMAGE}:latest ${PROJECT_DIR}/client'
+                sh '/usr/local/bin/docker build --platform linux/amd64 --no-cache --build-arg VITE_API_URL=http://15.207.231.86.nip.io:30500 -t ${CLIENT_IMAGE}:latest ${PROJECT_DIR}/client'
                 echo 'Build complete!'
             }
         }
@@ -71,7 +71,7 @@ pipeline {
             steps {
                 sshagent(credentials: ['ec2-ssh-key']) {
                     sh '''
-                        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ubuntu@13.206.187.45 "
+                        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ubuntu@15.207.231.86 "
                             export KUBECONFIG=~/.kube/config
                             kubectl rollout restart deployment cohort-server -n cohort || true
                             kubectl rollout restart deployment cohort-client -n cohort || true
